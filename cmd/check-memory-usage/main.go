@@ -3,16 +3,34 @@ package main
 import (
 	"fmt"
 	"reflect"
+	"strings"
 
 	corev2 "github.com/sensu/sensu-go/api/core/v2"
 	"github.com/sensu/sensu-plugin-sdk/sensu"
 	"github.com/shirou/gopsutil/v3/mem"
+	"github.com/iancoleman/strcase"
 )
 
 type Config struct {
 	sensu.PluginConfig
 	Critical float64
 	Warning float64
+	Format string
+}
+
+type MetricGroup struct {
+	Comment string
+	Type string
+	Name string
+	Value interface{}
+}
+
+func (g *MetricGroup) GenerateMetrics() string {
+	output := []string{}
+	output = append(output, fmt.Sprintf("# HELP mem_%s %s", g.Name, g.Comment))
+	output = append(output, fmt.Sprintf("# TYPE mem_%s %s", g.Name, g.Type))
+	output = append(output, fmt.Sprintf("mem_%s %v", g.Name, g.Value))
+	return strings.Join(output, "\n")
 }
 
 var (
@@ -41,6 +59,14 @@ var (
 			Usage: "Warning threshold for overall memory usage",
 			Value: &plugin.Warning,
 		},
+		&sensu.PluginConfigOption[string]{
+			Path: "format",
+			Argument: "format",
+			Shorthand: "f",
+			Default: "nagios",
+			Usage: "Choose output format 'nagios' or 'prometheus'",
+			Value: &plugin.Format,
+		},
 	}
 )
 
@@ -62,11 +88,69 @@ func executeCheck(event *corev2.Event) (int, error) {
 	v := reflect.ValueOf(vmStat)
 	v = reflect.Indirect(v)
 
-	typeOfVMStat := v.Type()
+	var output string
+	var status int
 
-	for i := 0; i < v.NumField(); i++ {
-		fmt.Printf("Field: %s\tValue: %v\n", typeOfVMStat.Field(i).Name, v.Field(i).Interface())
+	switch plugin.Format {
+	case "nagios":
+		output, status = makeNagiosPerfData(&v)
+	case "prometheus":
+		output, status = makePrometheusMetrics(&v)
+	default:
+		return sensu.CheckStateCritical, fmt.Errorf("unknown output format: %s", plugin.Format)
 	}
 
-	return sensu.CheckStateOK, nil
+	fmt.Println(output)
+
+	return status, nil
+}
+
+func makeNagiosPerfData(vmStat *reflect.Value) (string, int) {
+	typeOfVMStat := vmStat.Type()
+	status := sensu.CheckStateOK
+	output := []string{}
+	perfData := []string{}
+
+	if vmStat.FieldByName("UsedPercent").Float() > plugin.Critical {
+		output = append(output, fmt.Sprintf("%s Critical: %.2f%% memory usage | ", plugin.PluginConfig.Name, vmStat.FieldByName("UsedPercent").Float()))
+		status = sensu.CheckStateCritical
+	} else if vmStat.FieldByName("UsedPercent").Float() > plugin.Warning {
+		output = append(output, fmt.Sprintf("%s Warning: %.2f%% memory usage | ", plugin.PluginConfig.Name, vmStat.FieldByName("UsedPercent").Float()))
+		status = sensu.CheckStateWarning
+	} else {
+		output = append(output, fmt.Sprintf("%s OK: %.2f%% memory usage | ", plugin.PluginConfig.Name, vmStat.FieldByName("UsedPercent").Float()))
+	}
+
+	for i := 0; i< vmStat.NumField(); i++ {
+		perfData = append(perfData, fmt.Sprintf("mem_%s=%v", strcase.ToSnake(typeOfVMStat.Field(i).Name), vmStat.Field(i).Interface()))
+	}
+
+	output = append(output, strings.Join(perfData, ", "))
+
+	return strings.Join(output, ""), status
+}
+
+func makePrometheusMetrics(vmStat *reflect.Value) (string, int) {
+	typeOfVMStat := vmStat.Type()
+	status := sensu.CheckStateOK
+	output := []string{}
+
+	if vmStat.FieldByName("UsedPercent").Float() > plugin.Critical {
+		status = sensu.CheckStateCritical
+	} else if vmStat.FieldByName("UsedPercent").Float() > plugin.Warning {
+		status = sensu.CheckStateWarning
+	}
+
+	for i := 0; i < vmStat.NumField(); i++ {
+		measurement := strcase.ToSnake(typeOfVMStat.Field(i).Name)
+		metricGroup := &MetricGroup{
+			Name: measurement,
+			Type: "untyped",
+			Comment: fmt.Sprintf("Statistic %s", typeOfVMStat.Field(i).Name),
+			Value: vmStat.Field(i).Interface(),
+		}
+		output = append(output, metricGroup.GenerateMetrics())
+	}
+
+	return strings.Join(output, "\n"), status
 }

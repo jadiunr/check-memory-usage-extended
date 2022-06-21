@@ -3,6 +3,7 @@ module github.com/jadiunr/check-memory-usage-extended
 go 1.18
 
 require (
+	github.com/iancoleman/strcase v0.2.0
 	github.com/sensu/sensu-go/api/core/v2 v2.14.0
 	github.com/sensu/sensu-plugin-sdk v0.16.0-alpha4
 	github.com/shirou/gopsutil/v3 v3.22.5
