@@ -129,7 +129,7 @@ func makeInfluxDBLines(vmStat *reflect.Value) (string, int) {
 
 	for i := 0; i < vmStat.NumField(); i++ {
 		measurement := strcase.ToSnake(typeOfVMStat.Field(i).Name)
-		output = append(output, fmt.Sprintf("mem_%s %v", measurement, vmStat.Field(i).Interface()))
+		output = append(output, fmt.Sprintf("mem_%s value=%v", measurement, vmStat.Field(i).Interface()))
 	}
 
 	return strings.Join(output, "\n"), status
