@@ -2,39 +2,14 @@
 ![Go Test](https://github.com/jadiunr/check-memory-usage-extended/workflows/Go%20Test/badge.svg)
 ![goreleaser](https://github.com/jadiunr/check-memory-usage-extended/workflows/goreleaser/badge.svg)
 
-# Check Plugin Template
-
-## Overview
-check-plugin-template is a template repository which wraps the [Sensu Plugin SDK][2].
-To use this project as a template, click the "Use this template" button from the main project page.
-Once the repository is created from this template, you can use the [Sensu Plugin Tool][9] to
-populate the templated fields with the proper values.
-
-## Functionality
-
-After successfully creating a project from this template, update the `Config` struct with any
-configuration options for the plugin, map those values as plugin options in the variable `options`,
-and customize the `checkArgs` and `executeCheck` functions in [main.go][7].
-
-When writing or updating a plugin's README from this template, review the Sensu Community
-[plugin README style guide][3] for content suggestions and guidance. Remove everything
-prior to `# Sensu memory and swap usage checks extended` from the generated README file, and add additional context about the
-plugin per the style guide.
-
-## Releases with Github Actions
-
-To release a version of your project, simply tag the target sha with a semver release without a `v`
-prefix (ex. `1.0.0`). This will trigger the [GitHub action][5] workflow to [build and release][4]
-the plugin with goreleaser. Register the asset with [Bonsai][8] to share it with the community!
-
-***
-
 # Sensu memory and swap usage checks extended
 
 ## Table of Contents
 - [Overview](#overview)
-- [Files](#files)
+  - [Checks](#checks)
 - [Usage examples](#usage-examples)
+  - [check-memory-usage-extended](#check-memory-usage-extended)
+  - [check-swap-usage-extended](#check-swap-usage-extended)
 - [Configuration](#configuration)
   - [Asset registration](#asset-registration)
   - [Check definition](#check-definition)
@@ -44,11 +19,62 @@ the plugin with goreleaser. Register the asset with [Bonsai][8] to share it with
 
 ## Overview
 
-The Sensu memory and swap usage checks extended is a [Sensu Check][6] that ...
+The Sensu memory and swap usage checks extended are a [Sensu Check][6] that provide alerting and more detailed metrics for memory and swap usage. Metrics are provided in [nagios_perfdata](https://assets.nagios.com/downloads/nagioscore/docs/nagioscore/3/en/perfdata.html) (default) or [influxdb_line](https://docs.influxdata.com/enterprise_influxdb/v1.9/write_protocols/line_protocol_reference/)
 
-## Files
+### Checks
+
+This collection contains the following checks:
+
+- check-memory-usage-extended - for checking memory usage
+- check-swap-usage-extended - for checking swap usage
 
 ## Usage examples
+
+### check-memory-usage-extended
+
+```
+Check memory usage in more detail
+
+Usage:
+  check-memory-usage-extended [flags]
+  check-memory-usage-extended [command]
+
+Available Commands:
+  completion  Generate the autocompletion script for the specified shell
+  help        Help about any command
+  version     Print the version number of this plugin
+
+Flags:
+  -c, --critical float   Critical threshold for overall memory usage (default 90)
+  -f, --format string    Choose output format 'nagios' or 'influxdb' (default "nagios")
+  -h, --help             help for check-memory-usage-extended
+  -w, --warning float    Warning threshold for overall memory usage (default 75)
+
+Use "check-memory-usage-extended [command] --help" for more information about a command.
+```
+
+### check-swap-usage-extended
+
+```
+Check swap usage in more detail
+
+Usage:
+  check-swap-usage-extended [flags]
+  check-swap-usage-extended [command]
+
+Available Commands:
+  completion  Generate the autocompletion script for the specified shell
+  help        Help about any command
+  version     Print the version number of this plugin
+
+Flags:
+  -c, --critical float   Critical threshold for overall swap usage (default 90)
+  -f, --format string    Choose output format 'nagios' or 'influxdb' (default "nagios")
+  -h, --help             help for check-swap-usage-extended
+  -w, --warning float    Warning threshold for overall swap usage (default 75)
+
+Use "check-swap-usage-extended [command] --help" for more information about a command.
+```
 
 ## Configuration
 
@@ -64,7 +90,9 @@ sensuctl asset add jadiunr/check-memory-usage-extended
 
 If you're using an earlier version of sensuctl, you can find the asset on the [Bonsai Asset Index][https://bonsai.sensu.io/assets/jadiunr/check-memory-usage-extended].
 
-### Check definition
+### Check definitions
+
+#### check-memory-usage-extended
 
 ```yml
 ---
@@ -74,7 +102,30 @@ metadata:
   name: check-memory-usage-extended
   namespace: default
 spec:
-  command: check-memory-usage-extended --example example_arg
+  command: check-memory-usage-extended --critical 90 --warning 80
+  output_metric_format: nagios_perfdata
+  output_metric_handlers:
+  - influxdb
+  subscriptions:
+  - system
+  runtime_assets:
+  - jadiunr/check-memory-usage-extended
+```
+
+#### check-swap-usage-extended
+
+```yml
+---
+type: CheckConfig
+api_version: core/v2
+metadata:
+  name: check-swap-usage-extended
+  namespace: default
+spec:
+  command: check-swap-usage-extended --critical 90 --warning 75
+  output_metric_format: nagios_perfdata
+  output_metric_handlers:
+  - influxdb
   subscriptions:
   - system
   runtime_assets:
@@ -90,7 +141,8 @@ or create an executable script from this source.
 From the local path of the check-memory-usage-extended repository:
 
 ```
-go build
+go build ./cmd/check-memory-usage-extended/
+go build ./cmd/check-swap-usage-extended/
 ```
 
 ## Additional notes
