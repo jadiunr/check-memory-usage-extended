@@ -18,21 +18,6 @@ type Config struct {
 	Format string
 }
 
-type MetricGroup struct {
-	Comment string
-	Type string
-	Name string
-	Value interface{}
-}
-
-func (g *MetricGroup) GenerateMetrics() string {
-	output := []string{}
-	output = append(output, fmt.Sprintf("# HELP mem_%s %s", g.Name, g.Comment))
-	output = append(output, fmt.Sprintf("# TYPE mem_%s %s", g.Name, g.Type))
-	output = append(output, fmt.Sprintf("mem_%s %v", g.Name, g.Value))
-	return strings.Join(output, "\n")
-}
-
 var (
 	plugin = Config{
 		PluginConfig: sensu.PluginConfig{
@@ -64,7 +49,7 @@ var (
 			Argument: "format",
 			Shorthand: "f",
 			Default: "nagios",
-			Usage: "Choose output format 'nagios' or 'prometheus'",
+			Usage: "Choose output format 'nagios' or 'influxdb'",
 			Value: &plugin.Format,
 		},
 	}
@@ -94,8 +79,8 @@ func executeCheck(event *corev2.Event) (int, error) {
 	switch plugin.Format {
 	case "nagios":
 		output, status = makeNagiosPerfData(&v)
-	case "prometheus":
-		output, status = makePrometheusMetrics(&v)
+	case "influxdb":
+		output, status = makeInfluxDBLines(&v)
 	default:
 		return sensu.CheckStateCritical, fmt.Errorf("unknown output format: %s", plugin.Format)
 	}
@@ -122,7 +107,8 @@ func makeNagiosPerfData(vmStat *reflect.Value) (string, int) {
 	}
 
 	for i := 0; i< vmStat.NumField(); i++ {
-		perfData = append(perfData, fmt.Sprintf("mem_%s=%v", strcase.ToSnake(typeOfVMStat.Field(i).Name), vmStat.Field(i).Interface()))
+		measurement := strcase.ToSnake(typeOfVMStat.Field(i).Name)
+		perfData = append(perfData, fmt.Sprintf("mem_%s=%v", measurement, vmStat.Field(i).Interface()))
 	}
 
 	output = append(output, strings.Join(perfData, ", "))
@@ -130,7 +116,7 @@ func makeNagiosPerfData(vmStat *reflect.Value) (string, int) {
 	return strings.Join(output, ""), status
 }
 
-func makePrometheusMetrics(vmStat *reflect.Value) (string, int) {
+func makeInfluxDBLines(vmStat *reflect.Value) (string, int) {
 	typeOfVMStat := vmStat.Type()
 	status := sensu.CheckStateOK
 	output := []string{}
@@ -143,13 +129,7 @@ func makePrometheusMetrics(vmStat *reflect.Value) (string, int) {
 
 	for i := 0; i < vmStat.NumField(); i++ {
 		measurement := strcase.ToSnake(typeOfVMStat.Field(i).Name)
-		metricGroup := &MetricGroup{
-			Name: measurement,
-			Type: "untyped",
-			Comment: fmt.Sprintf("Statistic %s", typeOfVMStat.Field(i).Name),
-			Value: vmStat.Field(i).Interface(),
-		}
-		output = append(output, metricGroup.GenerateMetrics())
+		output = append(output, fmt.Sprintf("mem_%s %v", measurement, vmStat.Field(i).Interface()))
 	}
 
 	return strings.Join(output, "\n"), status
